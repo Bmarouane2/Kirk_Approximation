@@ -16,10 +16,10 @@ from matplotlib.animation import FuncAnimation
 
 
 def kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
-    sigma_G_tilde = (G2 / (G2 + K*cp.exp(-r*T))) * sigma_G
+    sigma_G_tilde = (G2 / (G2 + K)) * sigma_G
     sigma_tilde = cp.sqrt(sigma_F**2 + sigma_G_tilde**2 - 2 * rho * sigma_F * sigma_G_tilde)
     
-    d1 = (cp.log(F1 / (G2 + K*cp.exp(-r*T))) + 0.5 * sigma_tilde**2 * T) / (sigma_tilde * cp.sqrt(T))
+    d1 = (cp.log(F1 / (G2 + K)) + 0.5 * sigma_tilde**2 * T) / (sigma_tilde * cp.sqrt(T))
     d2 = d1 - sigma_tilde * cp.sqrt(T)
     
     price = F1 * norm.cdf(d1.get()) - (G2 + K) * norm.cdf(d2.get())
@@ -27,15 +27,15 @@ def kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
 
 
 def modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
-    sigma_G_tilde = (G2 / (G2 + K*cp.exp(-r*T))) * sigma_G
+    sigma_G_tilde = (G2 / (G2 + K)) * sigma_G
     sigma_tilde = cp.sqrt(sigma_F**2 + sigma_G_tilde**2 - 2 * rho * sigma_F * sigma_G_tilde)
     
     X_t = cp.log(F1)
-    Y_t = cp.log(G2 + K*cp.exp(-r*T))
+    Y_t = cp.log(G2 + K)
 
-    I_tilde = cp.sqrt(sigma_tilde**2) + 0.5 * ((sigma_G_tilde - rho * sigma_F)**2) * (1 / ((cp.sqrt(sigma_tilde**2))**3)) * sigma_G_tilde * (sigma_G * K*cp.exp(-r*T)) / (G2 + K*cp.exp(-r*T)) * (X_t - Y_t)
+    I_tilde = cp.sqrt(sigma_tilde**2) + 0.5 * ((sigma_G_tilde - rho * sigma_F)**2) * (1 / ((cp.sqrt(sigma_tilde**2))**3)) * sigma_G_tilde * (sigma_G * K) / (G2 + K) * (X_t - Y_t)
     
-    d1 = (cp.log(F1 / (G2 + K*cp.exp(-r*T))) + 0.5 * I_tilde**2 * T) / (I_tilde * cp.sqrt(T))
+    d1 = (cp.log(F1 / (G2 + K)) + 0.5 * I_tilde**2 * T) / (I_tilde * cp.sqrt(T))
     d2 = d1 - I_tilde * cp.sqrt(T)
     
     price = F1 * norm.cdf(d1.get()) - (G2 + K) * norm.cdf(d2.get())
@@ -127,9 +127,9 @@ fig = plt.figure(figsize=(12, 8))
 ax = fig.add_subplot(111, projection='3d')
 
 K, RHO = np.meshgrid(K_range_np, rho_range)
-surf = ax.plot_surface(K, RHO, relative_errors_np.T, cmap='coolwarm',alpha=0.7, edgecolor='b')
+surf = ax.plot_surface(K, RHO, relative_errors_np.T, cmap='coolwarm',alpha=0.5, edgecolor='b')
 
-modif_surf = ax.plot_surface(K, RHO, modif_relative_errors_np.T, cmap='viridis', alpha=0.5, edgecolor='k')
+modif_surf = ax.plot_surface(K, RHO, modif_relative_errors_np.T, cmap='viridis', edgecolor='k')
 
 # Add colorbars for both surfaces
 cbar1 = fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5, pad=0.1)
@@ -149,13 +149,13 @@ ax.set_title("Relative Errors: Abs(Kirk - MC) / MC")
 #ax.view_init(elev=30, azim=60)  # elev = vertical angle, azim = horizontal angle
 
 ## to save the animated surfaces
-def update(frame):
-    ax.view_init(elev=30, azim=frame)  # Rotate the plot by changing azim
-    return ax,
+# def update(frame):
+#     ax.view_init(elev=30, azim=frame)  # Rotate the plot by changing azim
+#     return ax,
 
-ani = FuncAnimation(fig, update, frames=np.arange(0, 360, 2), interval=50, blit=False)
+# ani = FuncAnimation(fig, update, frames=np.arange(0, 360, 2), interval=50, blit=False)
 
-ani.save('C:/Users/Marouane/OneDrive/Echange/Uniper/numerical result/rotating_3d_surface.mp4', writer='ffmpeg', fps=10)  # For .mp4
+# ani.save('C:/Users/Marouane/OneDrive/Echange/Uniper/numerical result/rotating_3d_surface.mp4', writer='ffmpeg', fps=10)  # For .mp4
 
 plt.tight_layout()
 plt.show()

@@ -17,10 +17,10 @@ from matplotlib.animation import FuncAnimation
 
 
 def kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
-    sigma_G_tilde = (G2 / (G2 + K*np.exp(-r*T))) * sigma_G
+    sigma_G_tilde = (G2 / (G2 + K)) * sigma_G
     sigma_tilde = np.sqrt(sigma_F**2 + sigma_G_tilde**2 - 2 * rho * sigma_F * sigma_G_tilde)
     
-    d1 = (np.log(F1 / (G2 + K*np.exp(-r*T))) + 0.5 * sigma_tilde**2 * T) / (sigma_tilde * np.sqrt(T))
+    d1 = (np.log(F1 / (G2 + K)) + 0.5 * sigma_tilde**2 * T) / (sigma_tilde * np.sqrt(T))
     d2 = d1 - sigma_tilde * np.sqrt(T)
     
     price = F1 * norm.cdf(d1) - (G2 + K) * norm.cdf(d2)
@@ -28,16 +28,16 @@ def kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
 
 
 def modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
-    sigma_G_tilde = (G2 / (G2 + K*np.exp(-r*T))) * sigma_G
+    sigma_G_tilde = (G2 / (G2 + K)) * sigma_G
     sigma_tilde = np.sqrt(sigma_F**2 + sigma_G_tilde**2 - 2 * rho * sigma_F * sigma_G_tilde)
     
     X_t = np.log(F1)
-    Y_t = np.log(G2 + K*np.exp(-r*T))
+    Y_t = np.log(G2 + K)
 
-    I_tilde = np.sqrt(sigma_tilde**2) + 0.5 * ((sigma_G_tilde  - rho * sigma_F)**2) * (1 / ((np.sqrt(sigma_tilde**2))**3)) * sigma_G_tilde * (sigma_G * K*np.exp(-r*T)) / (G2 + K*np.exp(-r*T)) * (X_t - Y_t)
+    I_tilde = np.sqrt(sigma_tilde**2) + 0.5 * ((sigma_G_tilde  - rho * sigma_F)**2) * (1 / ((np.sqrt(sigma_tilde**2))**3)) * sigma_G_tilde * (sigma_G * K) / (G2 + K) * (X_t - Y_t)
     
     
-    d1 = (np.log(F1 / (G2 + K*np.exp(-r*T))) + 0.5 * I_tilde**2 * T) / (I_tilde * np.sqrt(T))
+    d1 = (np.log(F1 / (G2 + K)) + 0.5 * I_tilde**2 * T) / (I_tilde * np.sqrt(T))
     d2 = d1 - I_tilde * np.sqrt(T)
     
     price = F1 * norm.cdf(d1) - (G2 + K) * norm.cdf(d2)
