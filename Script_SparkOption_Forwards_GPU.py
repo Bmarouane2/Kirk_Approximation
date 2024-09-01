@@ -15,7 +15,7 @@ from matplotlib.animation import FuncAnimation
 
 
 
-def kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
+def kirk_approximation_cp(F1, G2, K, T, sigma_F, sigma_G, rho, r):
     sigma_G_tilde = (G2 / (G2 + K)) * sigma_G
     sigma_tilde = cp.sqrt(sigma_F**2 + sigma_G_tilde**2 - 2 * rho * sigma_F * sigma_G_tilde)
     
@@ -26,7 +26,7 @@ def kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
     return cp.exp(-r*T)*price
 
 
-def modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
+def modif_kirk_approximation_cp(F1, G2, K, T, sigma_F, sigma_G, rho, r):
     sigma_G_tilde = (G2 / (G2 + K)) * sigma_G
     sigma_tilde = cp.sqrt(sigma_F**2 + sigma_G_tilde**2 - 2 * rho * sigma_F * sigma_G_tilde)
     
@@ -42,7 +42,24 @@ def modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
     return cp.exp(-r*T)*price
 
 
-def mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, num_simulations=50000000):
+def delta_G_modif_kirk_approximation_cp(F1, G2, K, T, sigma_F, sigma_G, rho, r):
+    sigma_G_tilde = (G2 / (G2 + K)) * sigma_G
+    sigma_tilde = cp.sqrt(sigma_F**2 + sigma_G_tilde**2 - 2 * rho * sigma_F * sigma_G_tilde)
+    
+    X_t = cp.log(F1)
+    Y_t = cp.log(G2 + K)
+
+    I_tilde = cp.sqrt(sigma_tilde**2) + 0.5 * ((sigma_G_tilde - rho * sigma_F)**2) * (1 / ((cp.sqrt(sigma_tilde**2))**3)) * sigma_G_tilde * (sigma_G * K) / (G2 + K) * (X_t - Y_t)
+    
+    d1 = (cp.log(F1 / (G2 + K)) + 0.5 * I_tilde**2 * T) / (I_tilde * cp.sqrt(T))
+    d2 = d1 - I_tilde * cp.sqrt(T)
+    
+    price = - norm.cdf(d2.get())
+    return cp.exp(-r*T)*price
+
+
+
+def mc_simulation_cp(F1, G2, K, T, sigma_F, sigma_G, rho, r, num_simulations=50000000):
     dt = T
     Z1 = cp.random.standard_normal(num_simulations)
     Z2 = rho * Z1 + cp.sqrt(1 - rho**2) * cp.random.standard_normal(num_simulations)
@@ -78,9 +95,9 @@ start_time = time.time()
 for i, K in enumerate(K_range):
     for j, rho in enumerate(rho_range):
         print('K:' + str(K) + '::' + 'rho: ' + str(rho))
-        kirk_prices[i, j] = kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r)
-        modif_kirk_prices[i, j] = modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r)
-        mc_prices[i, j] = mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r)
+        kirk_prices[i, j] = kirk_approximation_cp(F1, G2, K, T, sigma_F, sigma_G, rho, r)
+        modif_kirk_prices[i, j] = modif_kirk_approximation_cp(F1, G2, K, T, sigma_F, sigma_G, rho, r)
+        mc_prices[i, j] = mc_simulation_cp(F1, G2, K, T, sigma_F, sigma_G, rho, r)
         relative_errors[i, j] = abs(kirk_prices[i, j] - mc_prices[i, j]) / mc_prices[i, j] * 100
         modif_relative_errors[i, j] = abs(modif_kirk_prices[i, j] - mc_prices[i, j]) / mc_prices[i, j] * 100
 
