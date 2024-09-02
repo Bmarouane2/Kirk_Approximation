@@ -12,9 +12,10 @@ from scipy.stats import norm
 from mpl_toolkits.mplot3d import Axes3D
 import time
 from matplotlib.animation import FuncAnimation
+import cupy as cp 
 
 
-
+n_f = lambda x: np.exp(-x**2/2)/np.sqrt(2*np.pi)
 
 def kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
     sigma_G_tilde = (G2 / (G2 + K)) * sigma_G
@@ -43,8 +44,11 @@ def delta_G_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
     d1 = (np.log(F1 / (G2 + K)) + 0.5 * sigma_tilde**2 * T) / (sigma_tilde * np.sqrt(T))
     d2 = d1 - sigma_tilde * np.sqrt(T)
     
-    price = -norm.cdf(d2)
-    return np.exp(-r*T)*price
+    dg_dG= sigma_G*K/sigma_tilde*(sigma_G_tilde - rho*sigma_F)/(G2+K)**2
+    
+    return np.exp(-r*T)*(-norm.cdf(d2) + (G2 + K) *n_f(d2)*np.sqrt(T)*dg_dG)
+    # return np.exp(-r*T)*(-norm.cdf(d2))
+
 
 
 def modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
@@ -55,8 +59,7 @@ def modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
     Y_t = np.log(G2 + K)
 
     I_tilde = np.sqrt(sigma_tilde**2) + 0.5 * ((sigma_G_tilde  - rho * sigma_F)**2) * (1 / ((np.sqrt(sigma_tilde**2))**3)) * sigma_G_tilde * (sigma_G * K) / (G2 + K) * (X_t - Y_t)
-    
-    
+
     d1 = (np.log(F1 / (G2 + K)) + 0.5 * I_tilde**2 * T) / (I_tilde * np.sqrt(T))
     d2 = d1 - I_tilde * np.sqrt(T)
     
@@ -73,12 +76,12 @@ def delta_F_modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
     Y_t = np.log(G2 + K)
 
     I_tilde = np.sqrt(sigma_tilde**2) + 0.5 * ((sigma_G_tilde  - rho * sigma_F)**2) * (1 / ((np.sqrt(sigma_tilde**2))**3)) * sigma_G_tilde * (sigma_G * K) / (G2 + K) * (X_t - Y_t)
-    
+    dI_dF = 0.5 * ((sigma_G_tilde  - rho * sigma_F)**2) * (1 / ((np.sqrt(sigma_tilde**2))**3)) * sigma_G_tilde * (sigma_G * K) / (G2 + K) * 1/F1
     
     d1 = (np.log(F1 / (G2 + K)) + 0.5 * I_tilde**2 * T) / (I_tilde * np.sqrt(T))
     
     price = norm.cdf(d1)
-    return np.exp(-r*T)*price
+    return np.exp(-r*T)*(norm.cdf(d1) + F1*n_f(d1)*np.sqrt(T)*dI_dF)
 
 
 def delta_G_modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
@@ -93,22 +96,39 @@ def delta_G_modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
     d1 = (np.log(F1 / (G2 + K)) + 0.5 * I_tilde**2 * T) / (I_tilde * np.sqrt(T))
     d2 = d1 - I_tilde * np.sqrt(T)
     
-    price =- norm.cdf(d2)
-    return np.exp(-r*T)*price
+    dg_dG= sigma_G*K/sigma_tilde*(sigma_G_tilde - rho*sigma_F)/(G2+K)**2
+    
+    addon_dg_1 = K/(G2+K)**2 *sigma_G*(sigma_G_tilde -rho * sigma_F)* (1 / ((np.sqrt(sigma_tilde**2))**3)) * sigma_G_tilde * (sigma_G * K) / (G2 + K) * (X_t - Y_t)
+    addon_dg_2 = dg_dG*(-3)/(np.sqrt(sigma_tilde**2))**4*((sigma_G_tilde  - rho * sigma_F)**2) * sigma_G_tilde * (sigma_G * K) / (G2 + K) * (X_t - Y_t)
+    addon_dg_4 = (K/(G2+K)**2 - 2*G2*K/(G2+K)**3)*((sigma_G_tilde  - rho * sigma_F)**2) * (1 / ((np.sqrt(sigma_tilde**2))**3)) * sigma_G**2 * (X_t - Y_t)
+    addon_dg_5 = -1/(G2+K)*((sigma_G_tilde  - rho * sigma_F)**2) * (1 / ((np.sqrt(sigma_tilde**2))**3)) * sigma_G_tilde * (sigma_G * K) / (G2 + K)
+    
+    dI_dG = dg_dG + 0.5* (addon_dg_1 + addon_dg_2 +addon_dg_4+ addon_dg_5)
+    
+    
+    return np.exp(-r*T)*(-norm.cdf(d2) + (G2 + K) *n_f(d2)*np.sqrt(T)*dI_dG)
 
-def mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, num_simulations=500000):
+
+def mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, num_simulations=1000000):
     dt = T
     Z1 = np.random.standard_normal(num_simulations)
-    Z2 = rho * Z1 + np.sqrt(1 - rho**2) * np.random.standard_normal(num_simulations)
+    Z =np.random.standard_normal(num_simulations)
+    Z2 = rho * Z1 + np.sqrt(1 - rho**2) * Z
     
     F1_T = F1 * np.exp((- 0.5 * sigma_F**2) * T + sigma_F * np.sqrt(dt) * Z1)
     G2_T = G2 * np.exp((- 0.5 * sigma_G**2) * T + sigma_G * np.sqrt(dt) * Z2)
     
+    F1_T_inv = F1 * np.exp((- 0.5 * sigma_F**2) * T + sigma_F * np.sqrt(dt) * (-Z1))
+    G2_T_inv = G2 * np.exp((- 0.5 * sigma_G**2) * T + sigma_G * np.sqrt(dt) * (-Z2))
+    
+    
     payoffs = np.maximum(F1_T - G2_T - K, 0)
-    price = np.exp(-r * T) * np.mean(payoffs)
+    payoffs_inv = np.maximum(F1_T_inv - G2_T_inv - K, 0)
+    
+    price = np.exp(-r * T) * np.mean([payoffs, payoffs_inv])
     return price
 
-def delta_F_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.01, num_simulations=500000):
+def delta_F_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.01, num_simulations=2000000):
     dt = T
     Z1 = np.random.standard_normal(num_simulations)
     Z2 = rho * Z1 + np.sqrt(1 - rho**2) * np.random.standard_normal(num_simulations)
@@ -128,7 +148,7 @@ def delta_F_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.01, num_si
     delta_mc = (price_plus - price_minus) / h
     return delta_mc
 
-def delta_G_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.001, num_simulations=500000):
+def delta_G_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.001, num_simulations=2000000):
     dt = T
     Z1 = np.random.standard_normal(num_simulations)
     Z2 = rho * Z1 + np.sqrt(1 - rho**2) * np.random.standard_normal(num_simulations)
@@ -158,8 +178,9 @@ sigma_G = 0.2  # Volatility of gas price
 r = 0.02  # Risk-free rate
 
 # Generate data for surface plot
+# K_range = np.arange(0, 21, 1)
 K_range = np.arange(0, 21, 1)
-rho_range = [0.70, 0.725, 0.75, 0.775, 0.80, 0.825, 0.85, 0.875, 0.90, 0.925, 0.95, 0.975, 0.999]
+rho_range = [0.90, 0.925, 0.95, 0.975, 0.999]
 
 
 kirk_prices = np.zeros((len(K_range), len(rho_range)))
@@ -217,7 +238,8 @@ for i, k in enumerate(K_range):
 end_time = time.time()      
 execution_time = end_time - start_time 
 print(f"Execution Time: {execution_time} seconds")    
-        
+rho_to_plot = [0.90, 0.999]
+       
       
 ############################## PLOT  ####################################################################
 # #2D PLot      
@@ -251,9 +273,9 @@ print(f"Execution Time: {execution_time} seconds")
 ###################################################################################################################
 ############################## *Table ########
 
-rho_to_plot = [0.70, 0.80, 0.90, 0.999]
-K_to_plot = [5,10,20]
-
+rho_to_plot =rho_range
+# K_to_plot = [5,10,20]
+K_to_plot=[0,5]
 # Loop through each row
 for i_graph, rho in enumerate(rho_to_plot):
     j = rho_range.index(rho)
@@ -278,9 +300,6 @@ for i_graph, rho in enumerate(rho_to_plot):
 ############################## Call Price ####################################################################
 ############################# ############################################################################################
 ############################## PLOT  2D Pice ####################################################################
-# rho_to_plot = [0.80, 0.85, 0.90, 0.95, 0.999]
-rho_to_plot = [0.80, 0.90, 0.999]
-
 # Number of rows
 num_rows = len(rho_to_plot)
 
@@ -372,7 +391,6 @@ plt.show()
 ############################## Call Delta  F ####################################################################
 ############################# ############################################################################################
 ############################## PLOT  2D Pice ####################################################################
-rho_to_plot = [0.80, 0.90, 0.999]
 # Number of rows
 num_rows = len(rho_to_plot)
 
@@ -466,7 +484,6 @@ plt.show()
 ############################## Call Delta  G ####################################################################
 ############################# ############################################################################################
 ############################## PLOT  2D Pice ####################################################################
-rho_to_plot = [0.80, 0.90, 0.999]
 # Number of rows
 num_rows = len(rho_to_plot)
 
@@ -502,7 +519,7 @@ for i_graph, rho in enumerate(rho_to_plot):
 # plt.tight_yout()
 plt.subplots_adjust(hspace=0.9)  
 plt.show()
-bbbbb
+
 
 
 
