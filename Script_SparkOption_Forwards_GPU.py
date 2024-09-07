@@ -1,5 +1,5 @@
 
-
+from scipy import stats
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
@@ -102,7 +102,7 @@ def delta_G_modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
     
     return np.exp(-r*T)*(-norm.cdf(d2) + (G2 + K) *n_f(d2)*np.sqrt(T)*dI_dG)
 
-def mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, num_simulations=10000000):
+def mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, num_simulations=10000000, alpha =0.95):
     dt = T
     Z1 = cp.random.standard_normal(num_simulations)
     Z =cp.random.standard_normal(num_simulations)
@@ -118,47 +118,70 @@ def mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, num_simulations=100000
     payoffs = cp.maximum(F1_T - G2_T - K, 0)
     payoffs_inv = cp.maximum(F1_T_inv - G2_T_inv - K, 0)
     
-    price = cp.exp(-r * T) * cp.mean(cp.concatenate((payoffs, payoffs_inv)))
-    return price.tolist()
+    all_payoffs = cp.concatenate((payoffs, payoffs_inv))
+    discounted_payoffs = cp.exp(-r * T) * all_payoffs
+    
+    price = cp.mean(discounted_payoffs).get()
+    std_error = (cp.std(discounted_payoffs) / cp.sqrt(len(discounted_payoffs))).get()
 
-def delta_F_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.01, num_simulations=20000000):
+    confidence_interval = stats.t.interval(alpha, len(discounted_payoffs) - 1, loc=price.tolist(), scale=std_error.tolist())
+    return price.tolist(), confidence_interval
+
+def delta_F_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.01, num_simulations=20000000, alpha =0.95):
     dt = T
     Z1 = cp.random.standard_normal(num_simulations)
     Z2 = rho * Z1 + cp.sqrt(1 - rho**2) * cp.random.standard_normal(num_simulations)
     
     F1_T = F1 * cp.exp((- 0.5 * sigma_F**2) * T + sigma_F * cp.sqrt(dt) * Z1)
     F1_T_minus = (F1-h) * cp.exp((- 0.5 * sigma_F**2) * T + sigma_F * cp.sqrt(dt) * Z1)
-
     G2_T = G2 * cp.exp((- 0.5 * sigma_G**2) * T + sigma_G * cp.sqrt(dt) * Z2)
-    
     
     payoff_plus = cp.maximum(F1_T - G2_T - K, 0)
     payoff_minus = cp.maximum(F1_T_minus - G2_T - K, 0)
     
-    price_plus = cp.exp(-r * T) * cp.mean(payoff_plus)
-    price_minus = cp.exp(-r * T) * cp.mean(payoff_minus)
+    price_plus = cp.exp(-r * T) * payoff_plus
+    price_minus = cp.exp(-r * T) * payoff_minus
     
     delta_mc = (price_plus - price_minus) / h
-    return delta_mc.tolist()
+    
+    # Calculate mean and standard error
+    delta_mc_mean = cp.mean(delta_mc)
+    delta_mc_std_error = cp.std(delta_mc, ddof=1) / cp.sqrt(num_simulations)
+    
+    # Calculate 95% confidence interval
+    confidence_interval = stats.t.interval(alpha, df=num_simulations-1, 
+                                           loc=delta_mc_mean.get(), 
+                                           scale=delta_mc_std_error.get())
+    
+    return delta_mc_mean.tolist(), confidence_interval
 
-def delta_G_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.001, num_simulations=20000000):
+def delta_G_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.001, num_simulations=20000000, alpha =0.95):
     dt = T
     Z1 = cp.random.standard_normal(num_simulations)
     Z2 = rho * Z1 + cp.sqrt(1 - rho**2) * cp.random.standard_normal(num_simulations)
     
     F1_T = F1 * cp.exp((- 0.5 * sigma_F**2) * T + sigma_F * cp.sqrt(dt) * Z1)
-
     G2_T       = G2     * cp.exp((- 0.5 * sigma_G**2) * T + sigma_G * cp.sqrt(dt) * Z2)
     G2_T_minus = (G2-h) * cp.exp((- 0.5 * sigma_G**2) * T + sigma_G * cp.sqrt(dt) * Z2)
     
     payoff_plus = cp.maximum(F1_T - G2_T - K, 0)
     payoff_minus = cp.maximum(F1_T - G2_T_minus - K, 0)
     
-    price_plus = cp.exp(-r * T) * cp.mean(payoff_plus)
-    price_minus = cp.exp(-r * T) * cp.mean(payoff_minus)
+    price_plus = cp.exp(-r * T) * payoff_plus
+    price_minus = cp.exp(-r * T) * payoff_minus
     
     delta_mc = (price_plus - price_minus) / h
-    return delta_mc.tolist()
+    
+    # Calculate mean and standard error
+    delta_mc_mean = cp.mean(delta_mc)
+    delta_mc_std_error = cp.std(delta_mc, ddof=1) / cp.sqrt(num_simulations)
+    
+    # Calculate 95% confidence interval
+    confidence_interval = stats.t.interval(alpha, df=num_simulations-1, 
+                                           loc=delta_mc_mean.get(), 
+                                           scale=delta_mc_std_error.get())
+    
+    return delta_mc_mean.tolist(), confidence_interval
 
 # Parameters
 F1 = 100  # Forward price of electricity
@@ -172,15 +195,19 @@ r = 0.02  # Risk-free rate
 
 # Generate data for surface plot
 K_range = np.arange(0, 21, 1)
+# K_range = np.arange(-20, 22, 2)
 # K_range = np.array([0,5])
 rho_range = [0.70, 0.725, 0.75, 0.775, 0.80, 0.825, 0.85, 0.875, 0.90, 0.925, 0.95, 0.975, 0.999]
 
 
+
+#Prices
 kirk_prices = np.zeros((len(K_range), len(rho_range)))
 mc_prices = np.zeros((len(K_range), len(rho_range)))
 modif_kirk_prices = np.zeros((len(K_range), len(rho_range)))
 relative_errors = np.zeros((len(K_range), len(rho_range)))
 modif_relative_errors = np.zeros((len(K_range), len(rho_range)))
+#Deltas
 deltaF_kirk_prices = np.zeros((len(K_range), len(rho_range)))
 deltaF_modifkirk_prices = np.zeros((len(K_range), len(rho_range)))
 deltaF_mc = np.zeros((len(K_range), len(rho_range)))
@@ -191,7 +218,17 @@ deltaF_relative_errors = np.zeros((len(K_range), len(rho_range)))
 deltaF_modif_relative_errors = np.zeros((len(K_range), len(rho_range)))
 deltaG_relative_errors = np.zeros((len(K_range), len(rho_range)))
 deltaG_modif_relative_errors = np.zeros((len(K_range), len(rho_range)))
+
+#execTimes
 end_time_ij=[]
+
+#IC
+mc_prices_IC_up = np.zeros((len(K_range), len(rho_range)))
+mc_prices_IC_down = np.zeros((len(K_range), len(rho_range)))
+mc_delta_F_IC_up = np.zeros((len(K_range), len(rho_range)))
+mc_delta_G_IC_up = np.zeros((len(K_range), len(rho_range)))
+mc_delta_F_IC_down = np.zeros((len(K_range), len(rho_range)))
+mc_delta_G_IC_down = np.zeros((len(K_range), len(rho_range)))
 
 
 # for i, K in enumerate(K_range):
@@ -205,11 +242,13 @@ start_time = time.time()
 for i, k in enumerate(K_range):
     for j, rho in enumerate(rho_range):
         print('K:' + str(k) + '::' + 'rho: ' + str(rho))
+        
         #pricing the Call
         kirk_prices[i, j] = kirk_approximation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
         modif_kirk_prices[i, j] = modif_kirk_approximation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
         start_time_ij = time.time() 
-        mc_prices[i, j] = mc_simulation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
+        mc_prices[i, j] ,(mc_prices_IC_down[i,j], mc_prices_IC_up[i,j]) = mc_simulation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
+
         end_time_ij.append(time.time()  - start_time_ij )
         relative_errors[i, j] = abs(kirk_prices[i, j] - mc_prices[i, j]) / mc_prices[i, j] * 100
         modif_relative_errors[i, j] = abs(modif_kirk_prices[i, j] - mc_prices[i, j]) / mc_prices[i, j] * 100
@@ -217,7 +256,7 @@ for i, k in enumerate(K_range):
         #DeltaF:
         deltaF_kirk_prices[i, j] = delta_F_kirk_approximation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
         deltaF_modifkirk_prices[i, j] = delta_F_modif_kirk_approximation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
-        deltaF_mc[i, j] = delta_F_mc_simulation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
+        deltaF_mc[i, j], (mc_delta_F_IC_down[i,j], mc_delta_F_IC_up[i,j]) = delta_F_mc_simulation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
 
         deltaF_relative_errors[i, j] = abs((deltaF_kirk_prices[i, j] - deltaF_mc[i, j]) / deltaF_mc[i, j]) * 100
         deltaF_modif_relative_errors[i, j] = abs((deltaF_modifkirk_prices[i, j] - deltaF_mc[i, j]) / deltaF_mc[i, j]) * 100
@@ -225,7 +264,7 @@ for i, k in enumerate(K_range):
         #DeltaG
         deltaG_kirk_prices[i, j] = delta_G_kirk_approximation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
         deltaG_modifkirk_prices[i, j] = delta_G_modif_kirk_approximation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
-        deltaG_mc[i, j] = delta_G_mc_simulation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
+        deltaG_mc[i, j], (mc_delta_G_IC_down[i,j], mc_delta_G_IC_up[i,j]) = delta_G_mc_simulation(F1, G2, k, T, sigma_F, sigma_G, rho, r)
 
         deltaG_relative_errors[i, j] = abs(deltaG_kirk_prices[i, j]/ deltaG_mc[i, j] - 1) * 100
         deltaG_modif_relative_errors[i, j] = abs(deltaG_modifkirk_prices[i, j]/ deltaG_mc[i, j] - 1)  * 100
@@ -269,7 +308,7 @@ print(f"Execution Time to price mc Call: {mean_time_ij} seconds")
 ############################## *Table ########
 
 rho_to_plot = [0.70, 0.80, 0.90, 0.999]
-K_to_plot = [0,5,10,20]
+K_to_plot = [5,10,20]
 
 # Loop through each row
 for i_graph, rho in enumerate(rho_to_plot):
@@ -287,10 +326,11 @@ for i_graph, rho in enumerate(rho_to_plot):
 
         print('kirk: ' + "{:.4f}".format(kirk_price_))
         print('modif_kirk_prices: ' + "{:.4f}".format(modif_kirk_price_))
-        print('mc_price_: ' + "{:.4f}".format(mc_price_))
+        print('mc_price_: ' + "{:.4f}".format(mc_price_) + " ({:.4f}".format(mc_prices_IC_down[i,j]) + ",{:.4f})".format(mc_prices_IC_up[i,j]))
         print('error: ' + "{:.4f}".format(error*100))
         print('modif_error: ' + "{:.4f}".format(modif_error*100))
-
+        # print('ic_up: ' + "{:.4f}".format(mc_prices_IC_up[i,j]))
+        # print('ic_donw: ' + "{:.4f}".format(mc_prices_IC_down[i,j]))
 
 ############################## Call Price ####################################################################
 ############################# ############################################################################################
@@ -304,13 +344,14 @@ num_rows = len(rho_to_plot)
 # Create subplots
 fig, axes = plt.subplots(num_rows, 2, figsize=(18, 6 * num_rows))
 
+plot_ =10
 # Loop through each row
 for i_graph, rho in enumerate(rho_to_plot):
     i = rho_range.index(rho)
     print(rho_range[i])
     ax1 = axes[i_graph, 0]
     ax2 = axes[i_graph, 1]
-
+    
     # Plot on the left graph
     ax1.plot(K_range, relative_errors[:, i], label='Original Kirk formula')
     ax1.plot(K_range, modif_relative_errors[:, i], label='Modified Kirk formula')
@@ -320,9 +361,19 @@ for i_graph, rho in enumerate(rho_to_plot):
     ax1.set_ylabel('Error in %')
 
     # Plot on the right graph
-    ax2.plot(K_range,kirk_prices[:, i], label='Kirk Approximation Price', color='blue', linestyle='--')
-    ax2.plot(K_range,modif_kirk_prices[:, i], label='Moodified Kirk Approximation Price', color='orange', linestyle='--')
-    ax2.plot(K_range,mc_prices[:, i], label='mc price', color='green', alpha = 0.5)
+    ax2.plot(K_range[plot_:],kirk_prices[plot_:, i], label='Kirk Approximation Price', color='blue', linestyle='--')
+    ax2.plot(K_range[plot_:],modif_kirk_prices[plot_:, i], label='Moodified Kirk Approximation Price', color='orange', linestyle='--')
+    ax2.plot(K_range[plot_:],mc_prices[plot_:, i], label='mc price', color='green', alpha = 0.5)
+    
+        # Add confidence interval
+    ax2.fill_between(K_range[plot_:], mc_prices_IC_down[plot_:, i], mc_prices_IC_up[plot_:, i], 
+                     alpha=0.2, color='lightgreen', label='95% Confidence Interval')
+    
+    # Plot confidence interval boundaries
+    ax2.plot(K_range[plot_:], mc_prices_IC_up[plot_:, i], color='green', linestyle=':', alpha=0.7, label='CI Upper Bound')
+    ax2.plot(K_range[plot_:], mc_prices_IC_down[plot_:, i], color='green', linestyle=':', alpha=0.7, label='CI Lower Bound')
+    
+
     ax2.set_title(f'Call Price (rho = {rho})')
     ax2.legend()
     ax2.set_xlabel('K')
@@ -410,7 +461,7 @@ for i_graph, rho in enumerate(rho_to_plot):
 
         print('kirk: ' + "{:.4f}".format(kirk_price_))
         print('modif_kirk_prices: ' + "{:.4f}".format(modif_kirk_price_))
-        print('mc_price_: ' + "{:.4f}".format(mc_price_))
+        print('mc_price_: ' + "{:.4f}".format(mc_price_) + " ({:.4f}".format(mc_delta_F_IC_down[i,j]) + ",{:.4f})".format(mc_delta_F_IC_up[i,j]))
         print('error: ' + "{:.4f}".format(error*100))
         print('modif_error: ' + "{:.4f}".format(modif_error*100))
         
@@ -516,7 +567,7 @@ plt.show()
 
 
 rho_to_plot = [0.70, 0.80, 0.90, 0.999]
-K_to_plot = [0,5,10,20]
+K_to_plot = [5,10,20]
 
 # Loop through each row
 for i_graph, rho in enumerate(rho_to_plot):
@@ -534,7 +585,7 @@ for i_graph, rho in enumerate(rho_to_plot):
 
         print('kirk: ' + "{:.4f}".format(kirk_price_))
         print('modif_kirk_prices: ' + "{:.4f}".format(modif_kirk_price_))
-        print('mc_price_: ' + "{:.4f}".format(mc_price_))
+        print('mc_price_: ' + "{:.4f}".format(mc_price_)+ " ({:.4f}".format(mc_delta_G_IC_down[i,j]) + ",{:.4f})".format(mc_delta_G_IC_up[i,j]))
         print('error: ' + "{:.4f}".format(error*100))
         print('modif_error: ' + "{:.4f}".format(modif_error*100))
         
