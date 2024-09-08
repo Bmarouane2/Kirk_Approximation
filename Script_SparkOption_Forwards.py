@@ -111,7 +111,7 @@ def delta_G_modif_kirk_approximation(F1, G2, K, T, sigma_F, sigma_G, rho, r):
     return np.exp(-r*T)*(-norm.cdf(d2) + (G2 + K) *n_f(d2)*np.sqrt(T)*dI_dG)
 
 
-def mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, num_simulations=10000000, alpha =0.95):
+def mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, num_simulations=1000000, alpha =0.95):
     dt = T
     Z1 = np.random.standard_normal(num_simulations)
     Z =np.random.standard_normal(num_simulations)
@@ -137,7 +137,7 @@ def mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, num_simulations=100000
     return price, confidence_interval
 
 
-def delta_F_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.01, num_simulations=20000000, alpha =0.95):
+def delta_F_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.01, num_simulations=2000000, alpha =0.95):
     dt = T
     Z1 = np.random.standard_normal(num_simulations)
     Z2 = rho * Z1 + np.sqrt(1 - rho**2) * np.random.standard_normal(num_simulations)
@@ -167,7 +167,7 @@ def delta_F_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.01, num_si
     
     return delta_mc_mean.tolist(), confidence_interval
 
-def delta_G_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.001, num_simulations=20000000, alpha =0.95):
+def delta_G_mc_simulation(F1, G2, K, T, sigma_F, sigma_G, rho, r, h=0.001, num_simulations=2000000, alpha =0.95):
     dt = T
     Z1 = np.random.standard_normal(num_simulations)
     Z2 = rho * Z1 + np.sqrt(1 - rho**2) * np.random.standard_normal(num_simulations)
